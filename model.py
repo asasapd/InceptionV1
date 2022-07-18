@@ -3,25 +3,6 @@ from torch import nn, relu
 import torch
 from torch.nn import Conv2d, MaxPool2d, AvgPool2d, Dropout2d
 
-
-class NeuralNetwork(nn.Module):
-    def __init__(self):
-        super(NeuralNetwork, self).__init__()
-        self.flatten = nn.Flatten()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28 * 28, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 10),
-        )
-
-    def forward(self, x):
-        x = self.flatten(x)
-        logits = self.linear_relu_stack(x)
-        return logits
-
-
 class BasicConv2d(nn.Module):
     def __init__(
         self,
@@ -130,14 +111,40 @@ class Inception_block(nn.Module):
         outs = self._forward(x)
         return torch.concat(outs, 1)
 
-
+class AuxClassifier(nn.Module):
+    # • Average_pooling 5x5 s=3
+    # • A 1×1 convolution with 128 filters for dimension reduction and rectified linear activation.
+    # • A fully connected layer with 1024 units and rectified linear activation.
+    # • A dropout layer with 70% ratio of dropped outputs.
+    # • A linear layer with softmax loss as the classifier 
+    def __init__(self, in_channel: int, classes: int, fc_in: int) -> None:
+        super(AuxClassifier, self).__init__()
+        self.avgPool = AvgPool2d(kernel_size=5, stride=3)
+        self.conv = BasicConv2d(in_channels=in_channel, out_channels=128, kernel_size=1, stride=1)
+        self.fc = nn.Linear(fc_in, 1024)
+        self.activation = nn.ReLU()
+        self.dropout = nn.Dropout2d(p=0.7)
+        self.fc_2 = nn.Linear(1024, classes)
+        self.softmax = nn.Softmax()
+        
+    def forward(self, x):
+        x = self.avgPool(x)
+        x = self.conv(x)
+        x = nn.Flatten()(x)
+        x = self.activation(self.fc(x))
+        x = self.dropout(x)
+        x = self.fc_2(x)
+        x = self.softmax(x)
+        return x
+    
 class InceptionV1(nn.Module):
     def __init__(self, classes) -> None:
         super(InceptionV1, self).__init__()
-        self.max_pool = MaxPool2d(3, stride=2)
+        self.max_pool = MaxPool2d(3, stride=2, padding=1)
         self.first_convolution = nn.Sequential(
-            BasicConv2d(3, 64, 7, stride=2),
+            BasicConv2d(3, 64, 7, stride=2, padding=3),
             self.max_pool,
+            BasicConv2d(64, 64, 1, stride=1, padding=1),
             BasicConv2d(64, 192, 3, stride=1),
             self.max_pool,
         )
@@ -145,15 +152,19 @@ class InceptionV1(nn.Module):
         self.inception_block_3b = Inception_block(256, 128, (128, 192), (32, 96), 64)
 
         self.inception_block_4a = Inception_block(480, 192, (96, 208), (16, 48), 64)
+        #  -> 4x4x512
+        self.aux_1 = AuxClassifier(in_channel=512, classes=classes, fc_in=2048)
         self.inception_block_4b = Inception_block(512, 160, (112, 224), (24, 64), 64)
         self.inception_block_4c = Inception_block(512, 128, (128, 256), (24, 64), 64)
         self.inception_block_4d = Inception_block(512, 112, (144, 288), (32, 64), 64)
+        # Average_pooling 5x5 s=3 -> 4x4x528
+        self.aux_2 = AuxClassifier(in_channel=528, classes=classes, fc_in=2048)
         self.inception_block_4e = Inception_block(528, 256, (160, 320), (32, 128), 128)
 
         self.inception_block_5a = Inception_block(832, 256, (160, 320), (32, 128), 128)
         self.inception_block_5b = Inception_block(832, 384, (192, 384), (48, 128), 128)
 
-        self.avg_pool = AvgPool2d(kernel_size=5, stride=1)
+        self.avg_pool = AvgPool2d(kernel_size=7, stride=1)
         self.dropout = Dropout2d(p=0.4)
         self.fc = nn.Linear(1024, classes, bias=False)
         self.softmax = nn.Softmax()
@@ -166,9 +177,11 @@ class InceptionV1(nn.Module):
         x = self.inception_block_3b(x)
         x = self.max_pool(x)
         x = self.inception_block_4a(x)
+        aux_1 = self.aux_1(x)
         x = self.inception_block_4b(x)
         x = self.inception_block_4c(x)
         x = self.inception_block_4d(x)
+        aux_2 = self.aux_2(x)
         x = self.inception_block_4e(x)
         x = self.max_pool(x)
         x = self.inception_block_5a(x)
@@ -179,8 +192,5 @@ class InceptionV1(nn.Module):
         x = self.fc(x)
         x = self.activation(x)
         x = self.softmax(x)
-        return x
-
-
-if __name__ == "__main__":
-    model = InceptionV1()
+        return x, aux_1, aux_2
+        # return x
