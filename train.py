@@ -6,7 +6,7 @@ from torch import nn
 from torchsummary import summary
 import torchvision.transforms as T
 
-from model import InceptionV1
+from InceptionV1 import InceptionV1
 
 preprocess = T.Compose([
    T.ToTensor(),
