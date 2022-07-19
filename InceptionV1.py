@@ -166,7 +166,7 @@ class InceptionV1(nn.Module):
         self.inception_block_5a = Inception_block(832, 256, (160, 320), (32, 128), 128)
         self.inception_block_5b = Inception_block(832, 384, (192, 384), (48, 128), 128)
       
-        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(7, 7))
+        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         self.classifier = nn.Sequential(
             nn.Dropout(p=0.4),
             nn.Linear(1024 * 7 * 7, classes)
