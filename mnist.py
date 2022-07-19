@@ -3,9 +3,10 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor, ToPILImage
 import torch
 from torch import nn
-from model import InceptionV1
 from torchsummary import summary
 import torchvision.transforms as T
+
+from model import InceptionV1
 
 preprocess = T.Compose([
    T.ToTensor(),
@@ -46,10 +47,12 @@ print(f"Using {device} device")
 model = InceptionV1(10).to(device)
 print(model)
 summary(model, (3, 224, 224))
-exit()
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+loss_aux_1 = nn.CrossEntropyLoss()
+loss_aux_2 = nn.CrossEntropyLoss()
+
+optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
 
 def train(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
@@ -62,7 +65,7 @@ def train(dataloader, model, loss_fn, optimizer):
         loss = loss_fn(pred, y)
         loss_1 = loss_fn(aux_1, y)
         loss_2 = loss_fn(aux_2, y)
-        # loss = loss + 0.3 * loss_1 + 0.3 * loss_2
+        loss = loss + 0.3 * loss_1 + 0.3 * loss_2
         # Backpropagation
         optimizer.zero_grad()
         loss.backward()
@@ -80,7 +83,7 @@ def test(dataloader, model, loss_fn):
     with torch.no_grad():
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
-            pred, _, _ = model(X)
+            pred = model(X)
             test_loss += loss_fn(pred, y).item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches

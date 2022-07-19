@@ -123,18 +123,20 @@ class AuxClassifier(nn.Module):
         self.conv = BasicConv2d(in_channels=in_channel, out_channels=128, kernel_size=1, stride=1)
         self.fc = nn.Linear(fc_in, 1024)
         self.activation = nn.ReLU()
-        self.dropout = nn.Dropout2d(p=0.7)
-        self.fc_2 = nn.Linear(1024, classes)
-        self.softmax = nn.Softmax()
+        self.classifier = nn.Sequential(
+            nn.Dropout2d(p=0.7),
+            nn.Linear(1024, classes)
+        )
+        
         
     def forward(self, x):
+        N = x.shape[0]
         x = self.avgPool(x)
         x = self.conv(x)
-        x = nn.Flatten()(x)
-        x = self.activation(self.fc(x))
-        x = self.dropout(x)
-        x = self.fc_2(x)
-        x = self.softmax(x)
+        
+        x = x.reshape(N, -1)
+        x = self.fc(x)
+        x = self.classifier(x)
         return x
     
 class InceptionV1(nn.Module):
@@ -163,15 +165,15 @@ class InceptionV1(nn.Module):
 
         self.inception_block_5a = Inception_block(832, 256, (160, 320), (32, 128), 128)
         self.inception_block_5b = Inception_block(832, 384, (192, 384), (48, 128), 128)
-
-        self.avg_pool = AvgPool2d(kernel_size=7, stride=1)
-        self.dropout = Dropout2d(p=0.4)
-        self.fc = nn.Linear(1024, classes, bias=False)
-        self.softmax = nn.Softmax()
-        self.flatten = nn.Flatten()
-        self.activation = nn.ReLU()
+      
+        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(7, 7))
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=0.4),
+            nn.Linear(1024 * 7 * 7, classes)
+        )
 
     def forward(self, x):
+        N = x.shape[0]
         x = self.first_convolution(x)
         x = self.inception_block_3a(x)
         x = self.inception_block_3b(x)
@@ -186,11 +188,10 @@ class InceptionV1(nn.Module):
         x = self.max_pool(x)
         x = self.inception_block_5a(x)
         x = self.inception_block_5b(x)
-        x = self.avg_pool(x)
-        x = self.dropout(x)
-        x = self.flatten(x)
-        x = self.fc(x)
-        x = self.activation(x)
-        x = self.softmax(x)
-        return x, aux_1, aux_2
-        # return x
+        
+        x = self.avgpool(x)
+        x = x.reshape(N, -1)
+        x = self.classifier(x)
+        if self.training == True:
+            return [x, aux_1, aux_2]
+        return x
